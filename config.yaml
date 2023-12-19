@@ -1,0 +1,8 @@
+database:
+  type: "sqlite"  # Can be "postgres", "mysql", etc.
+  dsn: "mydatabase.db"  # For SQLite; use appropriate DSN for other databases
+bbs:
+  type: "tcp"
+  address: "192.168.0.6:1123"
+authentication:
+  method: "db"
