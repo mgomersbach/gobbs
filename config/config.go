@@ -31,7 +31,14 @@ type Config struct {
 		Method string
 		// Other fields like DB connection info, LDAP server address, etc.
 	}
+	Users []UserConfig
 	// Add other configuration fields as needed
+}
+
+type UserConfig struct {
+	Username string
+	Password string // Plain text password here; will be hashed before storage
+	// Add other relevant fields if needed
 }
 
 // ProcessFlags processes command line flags and returns a CommandLineArgs struct

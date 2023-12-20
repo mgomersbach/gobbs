@@ -2,9 +2,11 @@ package database
 
 import (
 	"gobbs/config"
+	"gobbs/model"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
@@ -33,4 +35,35 @@ func Connect(cfg *config.Config, log *logrus.Logger) (*gorm.DB, error) {
 	}
 
 	return db, nil
+}
+
+// InitializeDatabase sets up the required tables in the database
+func InitializeDatabase(db *gorm.DB, cfg *config.Config) error {
+	// AutoMigrate as before
+	if err := db.AutoMigrate(&model.User{}); err != nil {
+		return err
+	}
+
+	// Add predefined users from the config
+	for _, u := range cfg.Users {
+		var count int64
+		db.Model(&model.User{}).Where("username = ?", u.Username).Count(&count)
+
+		if count == 0 {
+			// User does not exist, create a new one
+			hashedPassword, err := bcrypt.GenerateFromPassword([]byte(u.Password), bcrypt.DefaultCost)
+			if err != nil {
+				return err
+			}
+
+			newUser := model.User{
+				Username: u.Username,
+				Password: string(hashedPassword),
+			}
+
+			db.Create(&newUser)
+		}
+	}
+
+	return nil
 }

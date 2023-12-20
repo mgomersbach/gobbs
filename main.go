@@ -33,6 +33,11 @@ func main() {
 		log.WithError(err).Fatal("Failed to connect to database")
 	}
 
+	// Initialize the database tables and predefined users
+	if err := database.InitializeDatabase(db, cfg); err != nil {
+		log.WithError(err).Fatal("Failed to initialize database")
+	}
+
 	// Initialize the appropriate authenticator
 	var authenticator auth.Authenticator
 	switch cfg.Authentication.Method {

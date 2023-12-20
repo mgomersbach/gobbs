@@ -1,62 +1,113 @@
 package bbs
 
 import (
-	"net"
-
 	"gobbs/auth"
 	"gobbs/config"
+
+	"github.com/reiver/go-oi"
+	"github.com/reiver/go-telnet"
 
 	"github.com/sirupsen/logrus"
 )
 
-// StartServer starts the BBS/Telnet server
-func StartServer(cfg *config.Config, authMethod auth.Authenticator, log *logrus.Logger, stopChan <-chan struct{}) {
-	// Use the address from the configuration
-	address := cfg.BBS.Address
-	listener, err := net.Listen("tcp", address)
-	if err != nil {
-		log.Fatalf("Failed to start server: %s", err)
-	}
-	defer listener.Close()
-
-	log.Printf("BBS/Telnet server listening on %s", address)
-
-	// Continuously listen for incoming connections
-	for {
-		select {
-		case <-stopChan:
-			// Perform cleanup and stop the server
-			log.Info("Shutting down server...")
-			return
-		default:
-			conn, err := listener.Accept()
-			if err != nil {
-				log.Printf("Failed to accept connection: %s", err)
-				continue
-			}
-
-			// Handle each connection in a separate goroutine
-			go handleConnection(conn, authMethod, log)
-		}
-	}
+// bbsHandler is a custom TELNET handler for your BBS server.
+type bbsHandler struct {
+	cfg        *config.Config
+	authMethod auth.Authenticator
+	log        *logrus.Logger
 }
 
-// handleConnection deals with an individual client connection
-func handleConnection(conn net.Conn, authMethod auth.Authenticator, log *logrus.Logger) {
-	defer conn.Close()
-
-	if !frontDoor(conn, authMethod, log) {
-		log.Info("FrontDoor access denied for connection")
+// ServeTELNET handles the Telnet connection for the BBS.
+func (handler bbsHandler) ServeTELNET(ctx telnet.Context, writer telnet.Writer, reader telnet.Reader) {
+	if !frontDoor(writer, reader, handler.authMethod, handler.log) {
+		handler.log.Info("FrontDoor access denied for connection")
 		return
 	}
 
-	// Proceed with the rest of the BBS logic after successful FrontDoor validation
-	// For example, navigating the menu, accessing forums, etc.
-	// ...
+	// User is authenticated; proceed with BBS main logic
+	oi.LongWrite(writer, []byte("\nWelcome to the BBS! Type 'exit' to disconnect.\n"))
+
+	for {
+		oi.LongWrite(writer, []byte("\n> ")) // Prompt
+		command := readLine(reader)
+
+		// Process commands
+		if command == "exit" {
+			break
+		}
+
+		// Handle other commands here
+		oi.LongWrite(writer, []byte("You typed: "+command+"\n"))
+	}
+}
+
+// StartServer starts the BBS/Telnet server
+func StartServer(cfg *config.Config, authMethod auth.Authenticator, log *logrus.Logger, stopChan <-chan struct{}) {
+	// Define the server address
+	serverAddr := cfg.BBS.Address
+	log.Printf("BBS/Telnet server listening on %s", serverAddr)
+
+	// Create and start the server
+	srv := &telnet.Server{
+		Addr:    serverAddr,
+		Handler: bbsHandler{cfg, authMethod, log},
+	}
+
+	// Start the server in a separate goroutine
+	go func() {
+		if err := srv.ListenAndServe(); err != nil {
+			log.Errorf("Failed to start Telnet server: %s", err)
+		}
+	}()
+
+	// Wait for stop signal to gracefully shut down the server
+	<-stopChan
+	log.Info("Server is stopping")
 }
 
 // frontDoor handles the initial interaction with the user
-func frontDoor(conn net.Conn, authMethod auth.Authenticator, log *logrus.Logger) bool {
-	conn.Write([]byte("Welcome to the BBS! Please login.\n"))
-	return true
+func frontDoor(writer telnet.Writer, reader telnet.Reader, authMethod auth.Authenticator, log *logrus.Logger) bool {
+	oi.LongWrite(writer, []byte("Welcome to GoBBS!\r\nLogin\r\nUsername: "))
+
+	username := readLine(reader)
+	oi.LongWrite(writer, []byte("Password: "))
+	password := readLine(reader)
+
+	authenticated, err := authMethod.Authenticate(username, password)
+	if err != nil {
+		log.Error("Authentication error:", err)
+		return false
+	}
+
+	return authenticated
+}
+
+// readLine reads a line of input from the Telnet reader and trims CR and LF characters
+func readLine(reader telnet.Reader) string {
+	var buffer [1]byte
+	var line []byte
+	newlineEncountered := false
+
+	for {
+		_, err := reader.Read(buffer[:])
+		if err != nil {
+			break
+		}
+
+		// Check for line feed or carriage return
+		if buffer[0] == '\n' || buffer[0] == '\r' {
+			if newlineEncountered {
+				// If we've already encountered a newline, break on subsequent newlines
+				break
+			}
+			newlineEncountered = true
+			continue
+		}
+
+		// If not newline, reset the flag and append to line
+		newlineEncountered = false
+		line = append(line, buffer[0])
+	}
+
+	return string(line)
 }
