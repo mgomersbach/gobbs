@@ -6,3 +6,8 @@ bbs:
   address: "192.168.0.6:1123"
 authentication:
   method: "db"
+users:
+  - username: "admin"
+    password: "admin123"
+  - username: "user"
+    password: "user123"
