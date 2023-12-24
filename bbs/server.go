@@ -3,70 +3,48 @@ package bbs
 import (
 	"gobbs/auth"
 	"gobbs/config"
+	"net"
 
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/mgomersbach/go-telnet"
 	"github.com/reiver/go-oi"
-	"github.com/reiver/go-telnet"
 
 	"github.com/sirupsen/logrus"
 )
 
-// bbsHandler is a custom TELNET handler for your BBS server.
 type bbsHandler struct {
 	cfg        *config.Config
 	authMethod auth.Authenticator
 	log        *logrus.Logger
 }
 
-// ServeTELNET handles the Telnet connection for the BBS.
-func (handler bbsHandler) ServeTELNET(ctx telnet.Context, writer telnet.Writer, reader telnet.Reader) {
-	if !frontDoor(writer, reader, handler.authMethod, handler.log) {
-		handler.log.Info("FrontDoor access denied for connection")
-		return
+// bbsHandler is a custom TELNET handler for your BBS server.
+func StartServer(cfg *config.Config, authenticator auth.Authenticator, log *logrus.Logger, stopChan chan struct{}) {
+	telnetHandler := func(ctx telnet.Context, conn *net.Conn, writer telnet.Writer, reader telnet.Reader) (tea.Model, []tea.ProgramOption) {
+		model := NewBBSModel(authenticator, log) // Initialize your Bubble Tea model here
+		opts := []tea.ProgramOption{}
+		return model, opts
 	}
 
-	// User is authenticated; proceed with BBS main logic
-	oi.LongWrite(writer, []byte("\nWelcome to the BBS! Type 'exit' to disconnect.\n"))
+	customHandler := NewCustomTelnetHandler(telnetHandler, nil) // Use 'nil' if there's no next handler
 
-	for {
-		oi.LongWrite(writer, []byte("\n> ")) // Prompt
-		command := readLine(reader)
-
-		// Process commands
-		if command == "exit" {
-			break
-		}
-
-		// Handle other commands here
-		oi.LongWrite(writer, []byte("You typed: "+command+"\n"))
-	}
-}
-
-// StartServer starts the BBS/Telnet server
-func StartServer(cfg *config.Config, authMethod auth.Authenticator, log *logrus.Logger, stopChan <-chan struct{}) {
-	// Define the server address
-	serverAddr := cfg.BBS.Address
-	log.Printf("BBS/Telnet server listening on %s", serverAddr)
-
-	// Create and start the server
-	srv := &telnet.Server{
-		Addr:    serverAddr,
-		Handler: bbsHandler{cfg, authMethod, log},
+	server := &telnet.Server{
+		Addr:    cfg.BBS.Address,
+		Handler: customHandler,
 	}
 
-	// Start the server in a separate goroutine
 	go func() {
-		if err := srv.ListenAndServe(); err != nil {
-			log.Errorf("Failed to start Telnet server: %s", err)
+		if err := server.ListenAndServe(); err != nil {
+			log.Fatal("Server failed:", err)
 		}
 	}()
 
-	// Wait for stop signal to gracefully shut down the server
-	<-stopChan
-	log.Info("Server is stopping")
+	<-stopChan // Wait for a signal to stop the server
+	// Perform server shutdown logic if necessary
 }
 
 // frontDoor handles the initial interaction with the user
-func frontDoor(writer telnet.Writer, reader telnet.Reader, authMethod auth.Authenticator, log *logrus.Logger) bool {
+func frontDoor(writer telnet.Writer, reader telnet.Reader, authMethod auth.Authenticator, log *logrus.Logger, p *tea.Program) bool {
 	oi.LongWrite(writer, []byte("Welcome to GoBBS!\r\nLogin\r\nUsername: "))
 
 	username := readLine(reader)

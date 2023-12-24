@@ -14,6 +14,7 @@ type CommandLineArgs struct {
 	BBSType      string
 	BBSAddress   string
 	AuthMethod   string
+	LogLevel     string
 }
 
 // Config represents the application configuration
@@ -31,8 +32,8 @@ type Config struct {
 		Method string
 		// Other fields like DB connection info, LDAP server address, etc.
 	}
-	Users []UserConfig
-	// Add other configuration fields as needed
+	Users    []UserConfig
+	LogLevel string
 }
 
 type UserConfig struct {
@@ -51,6 +52,7 @@ func ProcessFlags() CommandLineArgs {
 	flag.StringVar(&args.BBSType, "bbs-type", "", "BBS type")
 	flag.StringVar(&args.BBSAddress, "bbs-address", "", "BBS address")
 	flag.StringVar(&args.AuthMethod, "auth-method", "", "authentication method")
+	flag.StringVar(&args.LogLevel, "log-level", "", "log level")
 
 	flag.Parse()
 	return args
@@ -83,6 +85,9 @@ func LoadConfig(args CommandLineArgs) (*Config, error) {
 	}
 	if args.AuthMethod != "" {
 		cfg.Authentication.Method = args.AuthMethod
+	}
+	if args.LogLevel != "" {
+		cfg.LogLevel = args.LogLevel
 	}
 
 	return &cfg, nil

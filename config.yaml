@@ -11,3 +11,9 @@ users:
     password: "admin123"
   - username: "user"
     password: "user123"
+menus:
+  mainMenu:
+    - title: "Menu Item 1"
+      screen: "submenu1"
+    - title: "Menu Item 2"
+      screen: "submenu2"

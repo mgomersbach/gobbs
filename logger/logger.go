@@ -11,6 +11,8 @@ import (
 func InitializeLogger(cfg *config.Config) *logrus.Logger {
 	log := logrus.New()
 	log.Out = os.Stdout
+	log.SetLevel(logrus.DebugLevel)
+
 	// Set up additional logger configurations here
 	return log
 }
